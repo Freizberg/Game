@@ -79,4 +79,8 @@ public class MoveAction implements Action {
     public int getDestY() {
         return destY;
     }
+
+    public String type() { return "Move";}
+
+    public String description() { return "Move description.";}
 }

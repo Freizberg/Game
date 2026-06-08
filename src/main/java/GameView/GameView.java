@@ -4,9 +4,12 @@ import Action.Action;
 import GameEngine.GameState;
 import GameController.*;
 import GameEngine.Player;
+import Map.GameMap;
 import Map.Tile;
 import Map.TileType;
+import Units.Unit;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +27,7 @@ import java.util.UUID;
  * logic and should be implemented once the GUI requirements are finalized.</p>
  *
  * @author Dzhyhar Volodymyr
+ * @author Piotr Gryszka
  */
 public class GameView {
 
@@ -40,16 +44,19 @@ public class GameView {
     private boolean autosaveEnabled;
 
     /** Visible tiles prepared for rendering. */
-    private Tile[][] tiles;
+    private List<TileView> tiles;
 
     /** Visible units prepared for rendering. */
     private List<UnitView> units;
 
     /** Player summaries prepared for HUD rendering. */
-    private List<Player> players;
+    private List<PlayerView> players;
 
     /** Planned actions currently shown in side panels or overlays. */
-    private List<Action> plannedActions;
+    private List<PlannedActionView> plannedActions;
+
+    /** Id of the unit currently selected by the local player, or null. */
+    private UUID selectedUnitId;
 
     /**
      * Creates an empty game view.
@@ -76,8 +83,9 @@ public class GameView {
                     int currentRound,
                     UUID winnerId,
                     boolean autosaveEnabled,
-                    Tile[][] tiles,
-                    List<Player> players,
+                    List<TileView> tiles,
+                    List<UnitView> units,
+                    List<PlayerView> players,
                     List<PlannedActionView> plannedActions) {
     }
 
@@ -87,12 +95,23 @@ public class GameView {
      * <p>This factory method should gather all presentation-relevant data
      * from the controller and convert it into a UI-friendly structure.</p>
      *
-     * @param controller source controller
+     * @param gs GameState, state
+     * @param cr Integer, current round
+     * @param wid UUID, winner uuid
+     * @param ase boolean, auto save enabled
+     * @param map GameMap, map
+     * @param pl List<Player>, list of players
+     * @param al List<Action>, list of planned actions
+     * @param sel UUID, selected unit id
      * @return graphical snapshot prepared for rendering
      */
-    public static GameView fromController(GameController controller) {
-        // TODO Read controller state and map it into GameView.
-        throw new UnsupportedOperationException("GameView mapping is not implemented yet.");
+    public static GameView fromController(GameState gs, int cr, UUID wid, boolean ase, GameMap map, List<Player> pl, List<Action> al, UUID sel) {
+        GameView gv = new GameView();
+        gv.refreshFromController(gs,cr,wid,ase,map,pl,al,sel);
+        if (gv.isRenderable()) {
+            return gv;
+        }
+        return null;
     }
 
     /**
@@ -101,16 +120,24 @@ public class GameView {
      * <p>This method may later be used by GUI refresh cycles, HUD updates,
      * or manual synchronization after user interaction.</p>
      *
-     * @param controller source controller
+     * @param gs GameState, state
+     * @param cr Integer, current round
+     * @param wid UUID, winner uuid
+     * @param ase boolean, auto save enabled
+     * @param map GameMap, map
+     * @param pl List<Player>, list of players
+     * @param al List<Action>, list of planned actions
+     * @param sel UUID, selected unit id
      */
-    public void refreshFromController(GameController controller) {
-        this.state=controller.getCurrentPhase();
-        this.currentRound=controller.getEngine().getCurrentRound();
-        this.winnerId=controller.getEngine().getWinnerId();
-        this.autosaveEnabled=controller.isAutosaveEnabled();
-        this.tiles=controller.getEngine().getMap().getTiles();
-        this.players=controller.getEngine().getPlayers();
-        this.plannedActions=controller.getPlannedActionsView();
+    public void refreshFromController(GameState gs, int cr, UUID wid, boolean ase, GameMap map, List<Player> pl, List<Action> al, UUID sel) {
+        this.setState(gs);
+        this.setCurrentRound(cr);
+        this.setWinnerId(wid);
+        this.setAutosaveEnabled(ase);
+        this.setTiles(map);
+        this.setPlayers(pl);
+        this.setPlannedActions(al);
+        this.selectedUnitId=sel;
     }
 
     /**
@@ -128,8 +155,7 @@ public class GameView {
      * @param state new game phase
      */
     public void setState(GameState state) {
-        // TODO Store the provided game phase.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+        this.state=state;
     }
 
     /**
@@ -138,8 +164,7 @@ public class GameView {
      * @return round number
      */
     public int getCurrentRound() {
-        // TODO Return the current round number.
-        throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        return currentRound;
     }
 
     /**
@@ -148,8 +173,7 @@ public class GameView {
      * @param currentRound round number
      */
     public void setCurrentRound(int currentRound) {
-        // TODO Store the round number.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+        this.currentRound = currentRound;
     }
 
     /**
@@ -158,8 +182,7 @@ public class GameView {
      * @return winner UUID, or {@code null} if no winner exists
      */
     public UUID getWinnerId() {
-        // TODO Return the winner identifier.
-        throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        return winnerId;
     }
 
     /**
@@ -168,8 +191,7 @@ public class GameView {
      * @param winnerId winner UUID, or {@code null} if there is no winner yet
      */
     public void setWinnerId(UUID winnerId) {
-        // TODO Store the winner identifier.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+        this.winnerId=winnerId;
     }
 
     /**
@@ -178,8 +200,7 @@ public class GameView {
      * @return {@code true} if autosave is enabled
      */
     public boolean isAutosaveEnabled() {
-        // TODO Return autosave state.
-        throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        return this.autosaveEnabled;
     }
 
     /**
@@ -188,8 +209,7 @@ public class GameView {
      * @param autosaveEnabled autosave flag
      */
     public void setAutosaveEnabled(boolean autosaveEnabled) {
-        // TODO Store autosave state.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+        this.autosaveEnabled=autosaveEnabled;
     }
 
     /**
@@ -198,18 +218,26 @@ public class GameView {
      * @return tile views
      */
     public List<TileView> getTiles() {
-        // TODO Return tiles prepared for rendering.
-        throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        if (tiles == null) {
+            ArrayList<TileView> list = new ArrayList<>();
+            return list;
+        }
+        return tiles;
     }
 
     /**
      * Replaces the current tile snapshot used by the renderer.
      *
-     * @param tiles tile views
+     * @param map GameMap object for tiles
      */
-    public void setTiles(List<TileView> tiles) {
-        // TODO Store the provided tile views.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+    public void setTiles(GameMap map) {
+        List<TileView> tiles = new ArrayList<>();
+        for (int x = 0; x < map.getWidth(); x++) {
+            for (int y = 0; y < map.getHeight(); y++) {
+                tiles.add(new TileView(map.getTiles()[x][y]));
+            }
+        }
+        this.tiles=tiles;
     }
 
     /**
@@ -218,18 +246,28 @@ public class GameView {
      * @return unit views
      */
     public List<UnitView> getUnits() {
-        // TODO Return units prepared for rendering.
-        throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        if (units == null) {
+            List<UnitView> list = new ArrayList<>();
+            return list;
+        }
+        return units;
     }
 
     /**
      * Replaces the current unit snapshot used by the renderer.
      *
-     * @param units unit views
+     * @param players list of Player objects
      */
-    public void setUnits(List<UnitView> units) {
-        // TODO Store the provided unit views.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+    public void setUnits(List<Player> players) {
+        List<UnitView> units = new ArrayList<>();
+        for (Player p : players) {
+            if (p.getUnits() == null) continue;
+            for (Unit u : p.getUnits()) {
+                boolean selected = u.getId().equals(this.selectedUnitId);
+                units.add(new UnitView(u, p, selected));
+            }
+        }
+        this.units = units;
     }
 
     /**
@@ -238,8 +276,11 @@ public class GameView {
      * @return player views
      */
     public List<PlayerView> getPlayers() {
-        // TODO Return player summaries.
-        throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        if(players == null) {
+            List<PlayerView> list = new ArrayList<>();
+            return list;
+        }
+        return players;
     }
 
     /**
@@ -247,9 +288,12 @@ public class GameView {
      *
      * @param players player views
      */
-    public void setPlayers(List<PlayerView> players) {
-        // TODO Store the provided player summaries.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+    public void setPlayers(List<Player> players) {
+        List<PlayerView> playersViews = new ArrayList<>();
+        for (Player p : players) {
+            playersViews.add(new PlayerView(p));
+        }
+        this.players=playersViews;
     }
 
     /**
@@ -258,18 +302,20 @@ public class GameView {
      * @return planned action views
      */
     public List<PlannedActionView> getPlannedActions() {
-        // TODO Return planned action views.
-        throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        return plannedActions;
     }
 
     /**
      * Replaces the planned action snapshot currently shown by the GUI.
      *
-     * @param plannedActions planned action views
+     * @param actions planned actions
      */
-    public void setPlannedActions(List<PlannedActionView> plannedActions) {
-        // TODO Store the provided planned actions.
-        throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+    public void setPlannedActions(List<Action> actions) {
+        List<PlannedActionView> plannedActionViews = new ArrayList<>();
+        for (Action a : actions) {
+            plannedActionViews.add(new PlannedActionView(a));
+        }
+        this.plannedActions=plannedActionViews;
     }
 
     /**
@@ -281,7 +327,7 @@ public class GameView {
      * @param unitId identifier of the selected unit
      */
     public void selectUnit(UUID unitId) {
-        // TODO Mark the selected unit and clear selection from others if needed.
+        // need a window to implement
         throw new UnsupportedOperationException("Selection logic is not implemented yet.");
     }
 
@@ -292,7 +338,7 @@ public class GameView {
      * closes a context menu, or changes the active interaction mode.</p>
      */
     public void clearSelection() {
-        // TODO Clear selected unit and tile highlighting state.
+        // need a window to implement
         throw new UnsupportedOperationException("Selection clearing is not implemented yet.");
     }
 
@@ -305,7 +351,7 @@ public class GameView {
      * @param tiles tile identifiers or tile coordinates to highlight
      */
     public void highlightTiles(List<TileView> tiles) {
-        // TODO Apply highlight state to the provided tiles in the current view.
+        // need a window to implement
         throw new UnsupportedOperationException("Tile highlighting is not implemented yet.");
     }
 
@@ -313,7 +359,7 @@ public class GameView {
      * Clears any currently highlighted tiles.
      */
     public void clearHighlightedTiles() {
-        // TODO Remove tile highlight state from the current view.
+        // need a window to implement
         throw new UnsupportedOperationException("Tile highlight clearing is not implemented yet.");
     }
 
@@ -324,8 +370,10 @@ public class GameView {
      * @return {@code true} if the view is render-ready
      */
     public boolean isRenderable() {
-        // TODO Define and check minimal renderability rules.
-        throw new UnsupportedOperationException("Render validation is not implemented yet.");
+        if (tiles.isEmpty() || units.isEmpty() || players.isEmpty()) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -355,70 +403,60 @@ public class GameView {
          * Creates an empty tile view.
          */
         public TileView() {
-            // TODO Initialize default tile state if needed.
+
         }
 
         /**
          * Creates a tile view.
          *
-         * @param x tile X coordinate
-         * @param y tile Y coordinate
-         * @param type tile type name
-         * @param occupied whether the tile is occupied
-         * @param highlighted whether the tile is highlighted
+         * @param t Tile which is converted into information for frontend
          */
-        public TileView(int x, int y, String type, boolean occupied, boolean highlighted) {
-            // TODO Assign all incoming values to fields.
+        public TileView(Tile t) {
+            setX(t.getX());
+            setY(t.getY());
+            setType(t.getType());
+            setOccupied(t.isOccupied());
+            setHighlighted(false); //trzeba dorobić jak będzie okno jakieś
         }
 
         public int getX() {
-            // TODO Return tile X coordinate.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return x;
         }
 
         public void setX(int x) {
-            // TODO Store tile X coordinate.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.x = x;
         }
 
         public int getY() {
-            // TODO Return tile Y coordinate.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return y;
         }
 
         public void setY(int y) {
-            // TODO Store tile Y coordinate.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.y = y;
         }
 
-        public String getType() {
-            // TODO Return tile type.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+        public TileType getType() {
+            return type;
         }
 
-        public void setType(String type) {
-            // TODO Store tile type.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+        public void setType(TileType type) {
+            this.type = type;
         }
 
         public boolean isOccupied() {
-            // TODO Return occupied flag.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return occupied;
         }
 
         public void setOccupied(boolean occupied) {
-            // TODO Store occupied flag.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.occupied = occupied;
         }
 
         public boolean isHighlighted() {
-            // TODO Return highlighted flag.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return highlighted;
         }
 
         public void setHighlighted(boolean highlighted) {
-            // TODO Store highlighted flag.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.highlighted=highlighted;
         }
     }
 
@@ -432,6 +470,9 @@ public class GameView {
 
         /** Unit identifier. */
         private UUID unitId;
+
+        /**Unit name*/
+        private String name;
 
         /** Owning player identifier. */
         private UUID ownerId;
@@ -451,97 +492,101 @@ public class GameView {
         /** Whether the unit is currently selected in the GUI. */
         private boolean selected;
 
+        /** Max health points*/
+        private int maxHp;
+
+
         /**
          * Creates an empty unit view.
          */
         public UnitView() {
-            // TODO Initialize default unit state if needed.
+
         }
 
         /**
          * Creates a unit view.
          *
-         * @param unitId unit identifier
-         * @param ownerId owning player identifier
-         * @param unitType displayable unit type
-         * @param hp current health points
-         * @param x current X coordinate
-         * @param y current Y coordinate
-         * @param selected whether the unit is selected
+         * @param u Unit object made into information for frontend
+         * @param p unit's owner
          */
-        public UnitView(UUID unitId, UUID ownerId, String unitType, int hp, int x, int y, boolean selected) {
-            // TODO Assign all incoming values to fields.
+        public UnitView(Unit u, Player p, boolean selected) {
+            setUnitId(u.getId());
+            setName(u.getName());
+            setOwnerId(p.getUuid());
+            setUnitType(u.getClass().getSimpleName());
+            setHp(u.getHp());
+            setX(u.getPosX());
+            setY(u.getPosY());
+            setMaxHp(u.getMaxHp());
+            this.selected = selected;
         }
 
         public UUID getUnitId() {
-            // TODO Return unit identifier.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return unitId;
         }
 
         public void setUnitId(UUID unitId) {
-            // TODO Store unit identifier.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.unitId=unitId;
         }
 
         public UUID getOwnerId() {
-            // TODO Return owner identifier.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return ownerId;
         }
 
         public void setOwnerId(UUID ownerId) {
-            // TODO Store owner identifier.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.ownerId=ownerId;
         }
 
         public String getUnitType() {
-            // TODO Return unit type.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return unitType;
         }
 
         public void setUnitType(String unitType) {
-            // TODO Store unit type.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.unitType=unitType;
         }
 
         public int getHp() {
-            // TODO Return unit health.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return hp;
         }
 
         public void setHp(int hp) {
-            // TODO Store unit health.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.hp=hp;
         }
 
         public int getX() {
-            // TODO Return unit X coordinate.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return x;
         }
 
         public void setX(int x) {
-            // TODO Store unit X coordinate.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.x=x;
         }
 
         public int getY() {
-            // TODO Return unit Y coordinate.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return y;
         }
 
         public void setY(int y) {
-            // TODO Store unit Y coordinate.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.y=y;
         }
 
         public boolean isSelected() {
-            // TODO Return selected flag.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return selected;
         }
 
         public void setSelected(boolean selected) {
-            // TODO Store selected flag.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.selected = selected;
         }
+        public int getMaxHp() { return maxHp; }
+
+        public void setMaxHp(int maxHp) { this.maxHp = maxHp; }
+
+        public String getName(){
+            return name;
+        }
+        public void setName(String name){
+            this.name = name;
+        }
+
     }
 
     /**
@@ -565,59 +610,51 @@ public class GameView {
          * Creates an empty player view.
          */
         public PlayerView() {
-            // TODO Initialize default player state if needed.
+
         }
 
         /**
          * Creates a player view.
          *
-         * @param playerId player identifier
-         * @param name player display name
-         * @param turnEnded whether the player ended their turn
-         * @param unitsCount number of units owned by the player
+         * @param p Player object which is made into information for frontend
          */
-        public PlayerView(UUID playerId, String name, boolean turnEnded, int unitsCount) {
-            // TODO Assign all incoming values to fields.
+        public PlayerView(Player p) {
+            setPlayerId(p.getUuid());
+            setName(p.getName());
+            setTurnEnded(p.isTurnEnded());
+            setUnitsCount(p.getUnits().size());
         }
 
         public UUID getPlayerId() {
-            // TODO Return player identifier.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return playerId;
         }
 
         public void setPlayerId(UUID playerId) {
-            // TODO Store player identifier.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.playerId=playerId;
         }
 
         public String getName() {
-            // TODO Return player display name.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return name;
         }
 
         public void setName(String name) {
-            // TODO Store player display name.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.name=name;
         }
 
         public boolean isTurnEnded() {
-            // TODO Return turn-ended flag.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return turnEnded;
         }
 
         public void setTurnEnded(boolean turnEnded) {
-            // TODO Store turn-ended flag.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.turnEnded=turnEnded;
         }
 
         public int getUnitsCount() {
-            // TODO Return number of units.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return unitsCount;
         }
 
         public void setUnitsCount(int unitsCount) {
-            // TODO Store number of units.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.unitsCount=unitsCount;
         }
     }
 
@@ -639,48 +676,42 @@ public class GameView {
          * Creates an empty planned action view.
          */
         public PlannedActionView() {
-            // TODO Initialize default action state if needed.
+
         }
 
         /**
          * Creates a planned action view.
          *
-         * @param actionType action type name
-         * @param unitId acting unit identifier
-         * @param description UI-friendly action description
+         * @param a Class implementing Action interface
          */
-        public PlannedActionView(String actionType, UUID unitId, String description) {
-            // TODO Assign all incoming values to fields.
+        public PlannedActionView(Action a) {
+            setActionType(a.type());
+            setUnitId(a.getUnitId());
+            setDescription(a.description());
         }
 
         public String getActionType() {
-            // TODO Return action type.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return actionType;
         }
 
         public void setActionType(String actionType) {
-            // TODO Store action type.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.actionType=actionType;
         }
 
         public UUID getUnitId() {
-            // TODO Return acting unit identifier.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return unitId;
         }
 
         public void setUnitId(UUID unitId) {
-            // TODO Store acting unit identifier.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.unitId=unitId;
         }
 
         public String getDescription() {
-            // TODO Return action description.
-            throw new UnsupportedOperationException("Getter logic is not implemented yet.");
+            return description;
         }
 
         public void setDescription(String description) {
-            // TODO Store action description.
-            throw new UnsupportedOperationException("Setter logic is not implemented yet.");
+            this.description=description;
         }
     }
 }

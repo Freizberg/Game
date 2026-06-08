@@ -59,8 +59,7 @@ public class GameController {
     /** Optional path used for autosave snapshots. */
     private String autosavePath;
 
-    /** Creates the GameView object it will be returning */
-    private GameView gv;
+    private UUID selectedUnitId;
 
     /**
      * Constructs a GameController with all required collaborators.
@@ -81,7 +80,6 @@ public class GameController {
         this.network = network;
         this.saveManager = saveManager;
         this.inputHandler = inputHandler;
-        this.gv = new GameView();
     }
 
     /**
@@ -571,12 +569,7 @@ public class GameController {
             throw new IllegalStateException("GameEngine is not initialized.");
         }
 
-        gv.refreshFromController(this);
-
-        // TODO Build a dedicated immutable view model for GUI rendering.
-        // TODO Include map data, visible units, players, turn phase, winner and planned actions.
-        // TODO Avoid exposing mutable engine internals directly to the graphical layer.
-        return gv;
+        return GameView.fromController(getCurrentPhase(),getEngine().getCurrentRound(),getEngine().getWinnerId(),isAutosaveEnabled(),getEngine().getMap(),getEngine().getPlayers(),getPlannedActionsView(),getSelectedUnitId());
     }
 
     /**
@@ -786,4 +779,7 @@ public class GameController {
         // TODO Expose autosave settings via a dedicated view model if the GUI needs one source of truth.
         disableAutosave();
     }
+
+    public synchronized UUID getSelectedUnitId(){return selectedUnitId;}
+    public synchronized void setSelectedUnitId(UUID id) { this.selectedUnitId = id; }
 }

@@ -49,4 +49,8 @@ public class WaitAction implements Action {
         }
         return false;
     }
+
+    public String type() { return "Wait";}
+
+    public String description() { return "Wait description.";}
 }

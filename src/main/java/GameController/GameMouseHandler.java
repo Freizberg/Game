@@ -51,6 +51,7 @@ public class GameMouseHandler implements MouseListener, MouseMotionListener, Mou
         UUID uuid = gameMap.getTile(location.x, location.y).getUnit().getId();
         if (uuid!=selectedUnitID) {
             selectedUnitID = uuid;
+            gameController.setSelectedUnitId(selectedUnitID);
             refreshUnitInfoDisplay();
             return true;
         }
@@ -76,6 +77,7 @@ public class GameMouseHandler implements MouseListener, MouseMotionListener, Mou
                             selectUnit();
                         } else {
                             selectedUnitID = null;
+                            gameController.setSelectedUnitId(selectedUnitID);
                             refreshUnitInfoDisplay();
                         }
                     }
@@ -93,6 +95,7 @@ public class GameMouseHandler implements MouseListener, MouseMotionListener, Mou
                 break;
             case 2: // Wheel Press, has no use atm
                 selectedUnitID=null;
+                gameController.setSelectedUnitId(selectedUnitID);
                 refreshUnitInfoDisplay();
                 break;
         }

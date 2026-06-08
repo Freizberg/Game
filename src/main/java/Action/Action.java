@@ -31,4 +31,16 @@ public interface Action extends Serializable {
      * @return {@code true} if the action can be legally executed
      */
     boolean isValid(GameMap map);
+
+    /**
+     * Returns the type of action
+     * @return type of action
+     */
+    String type();
+
+    /**
+     * Returns the action's description
+     * @return description
+     */
+    String description();
 }

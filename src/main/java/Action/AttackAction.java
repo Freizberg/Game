@@ -104,4 +104,8 @@ public class AttackAction implements Action {
     public UUID getTargetId() {
         return targetId;
     }
+
+    public String type() { return "Attack";}
+
+    public String description() { return "Attack description.";}
 }

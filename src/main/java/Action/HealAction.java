@@ -99,4 +99,8 @@ public class HealAction implements Action {
     public UUID getTargetId() {
         return targetId;
     }
+
+    public String type() { return "Heal";}
+
+    public String description() { return "Heal description.";}
 }

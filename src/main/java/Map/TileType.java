@@ -15,9 +15,14 @@ package Map;
  * @author Dzhyhar Volodymyr
  */
 public enum TileType {
-    PLAIN,
-    FOREST,
-    OBSTACLE,
-    WATER,
-    MOUNTAIN
+    PLAIN("Plain"),
+    FOREST("Forest"),
+    OBSTACLE("Obstacle"),
+    WATER("Water"),
+    MOUNTAIN("Mountain");
+
+    public final String name;
+    TileType(String name) {
+        this.name=name;
+    }
 }

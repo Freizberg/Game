@@ -50,4 +50,8 @@ public class SkipTurnAction implements Action {
      * @return player UUID
      */
     public UUID getPlayerId() { return playerId; }
+
+    public String type() { return "SkipTurn";}
+
+    public String description() { return "SkipTurn description.";}
 }

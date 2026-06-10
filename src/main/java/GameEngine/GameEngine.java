@@ -25,9 +25,9 @@ import java.util.*;
  *
  * @author Dzhyhar Volodymyr
  * @author Cybulski Mikołaj
+ * @author Filip Glaser
  */
 public class GameEngine implements Serializable {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     private List<Player> players;
@@ -146,7 +146,7 @@ public class GameEngine implements Serializable {
             combatResolver.resolveAll(this);
         }
 
-        // Cleanup i regeneracja many magów
+        // Cleanup and mage mana regeneration
         for (Player p : players) {
             List<Unit> survivingUnits = new ArrayList<>();
 
@@ -176,7 +176,7 @@ public class GameEngine implements Serializable {
             if (alivePlayers == 0) draw = true;
         }
 
-        // Reset rundy
+        // Round reset
         for (Player p : players) {
             p.clearActions();
             for (Unit u : p.getUnits()) {
@@ -186,10 +186,13 @@ public class GameEngine implements Serializable {
         currentRound++;
 
         if (winner != null) {
+            this.winnerId = winner.getUuid();
             state = GameState.FINISHED;
         } else if (draw) {
+            this.winnerId = null;
             state = GameState.DRAW;
         } else {
+            this.winnerId = null;
             state = GameState.PLANNING;
         }
     }
@@ -232,7 +235,7 @@ public class GameEngine implements Serializable {
             }
         }
 
-        // Usuwanie kolizji
+        // Remove collisions
         for (List<Action> conflictedMoves : targetTiles.values()) {
             if (conflictedMoves.size() > 1) {
                 for (Action conflictedAction : conflictedMoves) {
@@ -303,10 +306,10 @@ public class GameEngine implements Serializable {
     }
 
     /**
-     * Odświeża układ jednostek na Tiles po otrzymaniu aktualizacji z sieci.
-     * Ponieważ GameStateUpdate nadpisuje koordynaty posX, posY wewnątrz samych
-     * obiektów Unit, siatka mapy mogłaby nadal trzymać referencje na starych kafelkach.
-     * Ta metoda czyści całą mapę, a następnie ustawia jednostki na ich nowych pozycjach.
+     * Refreshes unit placement on Tiles after receiving a network update.
+     * Because GameStateUpdate overwrites the posX and posY coordinates inside
+     * the Unit objects themselves, the map grid could still hold references to old tiles.
+     * This method clears the entire map and then places units at their updated positions.
      */
     public void refreshMapOccupancy() {
         if (map == null) return;
@@ -315,7 +318,7 @@ public class GameEngine implements Serializable {
             for (int y = 0; y < map.getHeight(); y++) {
                 Tile tile = map.getTile(x, y);
                 if (tile != null) {
-                    tile.setUnit(null); // Ustawiamy brak okupanta
+                    tile.setUnit(null); // Set no occupant
                 }
             }
         }

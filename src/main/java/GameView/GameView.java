@@ -1,15 +1,8 @@
 package GameView;
 
-import Action.Action;
 import GameEngine.GameState;
-import GameController.*;
-import GameEngine.Player;
-import Map.GameMap;
-import Map.Tile;
 import Map.TileType;
-import Units.Unit;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,44 +22,34 @@ import java.util.UUID;
  * @author Dzhyhar Volodymyr
  * @author Piotr Gryszka
  */
-public class GameView {
+public final class GameView {
 
     /** Current high-level match phase shown in the UI. */
-    private GameState state;
+    private final GameState state;
 
     /** Number of the current round displayed by the UI. */
-    private int currentRound;
+    private final int currentRound;
 
     /** Winner identifier, or {@code null} if the game is still ongoing. */
-    private UUID winnerId;
+    private final UUID winnerId;
 
     /** Whether autosave is currently enabled. */
-    private boolean autosaveEnabled;
+    private final boolean autosaveEnabled;
 
     /** Visible tiles prepared for rendering. */
-    private List<TileView> tiles;
+    private final List<TileView> tiles;
 
     /** Visible units prepared for rendering. */
-    private List<UnitView> units;
+    private final List<UnitView> units;
 
     /** Player summaries prepared for HUD rendering. */
-    private List<PlayerView> players;
+    private final List<PlayerView> players;
 
     /** Planned actions currently shown in side panels or overlays. */
-    private List<PlannedActionView> plannedActions;
+    private final List<PlannedActionView> plannedActions;
 
     /** Id of the unit currently selected by the local player, or null. */
-    private UUID selectedUnitId;
-
-    /**
-     * Creates an empty game view.
-     *
-     * <p>This constructor is intended for scenarios where the view is created
-     * first and populated later by a mapper, builder, or controller adapter.</p>
-     */
-    public GameView() {
-
-    }
+    private final UUID selectedUnitId;
 
     /**
      * Creates a complete game view snapshot.
@@ -76,8 +59,10 @@ public class GameView {
      * @param winnerId winner UUID, or {@code null} if there is no winner yet
      * @param autosaveEnabled whether autosave is enabled
      * @param tiles tile views prepared for rendering
+     * @param units unit views prepared for rendering
      * @param players player views prepared for HUD display
      * @param plannedActions planned action views prepared for side panels
+     * @param selectedUnitId id of the unit currently selected, or {@code null}
      */
     public GameView(GameState state,
                     int currentRound,
@@ -86,58 +71,17 @@ public class GameView {
                     List<TileView> tiles,
                     List<UnitView> units,
                     List<PlayerView> players,
-                    List<PlannedActionView> plannedActions) {
-    }
-
-    /**
-     * Builds a graphical snapshot from the current {@link GameController}.
-     *
-     * <p>This factory method should gather all presentation-relevant data
-     * from the controller and convert it into a UI-friendly structure.</p>
-     *
-     * @param gs GameState, state
-     * @param cr Integer, current round
-     * @param wid UUID, winner uuid
-     * @param ase boolean, auto save enabled
-     * @param map GameMap, map
-     * @param pl List<Player>, list of players
-     * @param al List<Action>, list of planned actions
-     * @param sel UUID, selected unit id
-     * @return graphical snapshot prepared for rendering
-     */
-    public static GameView fromController(GameState gs, int cr, UUID wid, boolean ase, GameMap map, List<Player> pl, List<Action> al, UUID sel) {
-        GameView gv = new GameView();
-        gv.refreshFromController(gs,cr,wid,ase,map,pl,al,sel);
-        if (gv.isRenderable()) {
-            return gv;
-        }
-        return null;
-    }
-
-    /**
-     * Refreshes this view from the given controller.
-     *
-     * <p>This method may later be used by GUI refresh cycles, HUD updates,
-     * or manual synchronization after user interaction.</p>
-     *
-     * @param gs GameState, state
-     * @param cr Integer, current round
-     * @param wid UUID, winner uuid
-     * @param ase boolean, auto save enabled
-     * @param map GameMap, map
-     * @param pl List<Player>, list of players
-     * @param al List<Action>, list of planned actions
-     * @param sel UUID, selected unit id
-     */
-    public void refreshFromController(GameState gs, int cr, UUID wid, boolean ase, GameMap map, List<Player> pl, List<Action> al, UUID sel) {
-        this.setState(gs);
-        this.setCurrentRound(cr);
-        this.setWinnerId(wid);
-        this.setAutosaveEnabled(ase);
-        this.setTiles(map);
-        this.setPlayers(pl);
-        this.setPlannedActions(al);
-        this.selectedUnitId=sel;
+                    List<PlannedActionView> plannedActions,
+                    UUID selectedUnitId) {
+        this.state = state;
+        this.currentRound = currentRound;
+        this.winnerId = winnerId;
+        this.autosaveEnabled = autosaveEnabled;
+        this.tiles = tiles == null ? List.of() : List.copyOf(tiles);
+        this.units = units == null ? List.of() : List.copyOf(units);
+        this.players = players == null ? List.of() : List.copyOf(players);
+        this.plannedActions = plannedActions == null ? List.of() : List.copyOf(plannedActions);
+        this.selectedUnitId = selectedUnitId;
     }
 
     /**
@@ -150,30 +94,12 @@ public class GameView {
     }
 
     /**
-     * Updates the current game phase displayed by the UI.
-     *
-     * @param state new game phase
-     */
-    public void setState(GameState state) {
-        this.state=state;
-    }
-
-    /**
      * Returns the current round number visible in the GUI.
      *
      * @return round number
      */
     public int getCurrentRound() {
         return currentRound;
-    }
-
-    /**
-     * Updates the current round number displayed in the GUI.
-     *
-     * @param currentRound round number
-     */
-    public void setCurrentRound(int currentRound) {
-        this.currentRound = currentRound;
     }
 
     /**
@@ -186,15 +112,6 @@ public class GameView {
     }
 
     /**
-     * Updates the winner identifier shown in the result overlay or HUD.
-     *
-     * @param winnerId winner UUID, or {@code null} if there is no winner yet
-     */
-    public void setWinnerId(UUID winnerId) {
-        this.winnerId=winnerId;
-    }
-
-    /**
      * Returns whether autosave is enabled.
      *
      * @return {@code true} if autosave is enabled
@@ -204,40 +121,12 @@ public class GameView {
     }
 
     /**
-     * Updates the autosave indicator shown in settings or HUD widgets.
-     *
-     * @param autosaveEnabled autosave flag
-     */
-    public void setAutosaveEnabled(boolean autosaveEnabled) {
-        this.autosaveEnabled=autosaveEnabled;
-    }
-
-    /**
      * Returns all tiles prepared for graphical rendering.
      *
      * @return tile views
      */
     public List<TileView> getTiles() {
-        if (tiles == null) {
-            ArrayList<TileView> list = new ArrayList<>();
-            return list;
-        }
         return tiles;
-    }
-
-    /**
-     * Replaces the current tile snapshot used by the renderer.
-     *
-     * @param map GameMap object for tiles
-     */
-    public void setTiles(GameMap map) {
-        List<TileView> tiles = new ArrayList<>();
-        for (int x = 0; x < map.getWidth(); x++) {
-            for (int y = 0; y < map.getHeight(); y++) {
-                tiles.add(new TileView(map.getTiles()[x][y]));
-            }
-        }
-        this.tiles=tiles;
     }
 
     /**
@@ -246,28 +135,7 @@ public class GameView {
      * @return unit views
      */
     public List<UnitView> getUnits() {
-        if (units == null) {
-            List<UnitView> list = new ArrayList<>();
-            return list;
-        }
         return units;
-    }
-
-    /**
-     * Replaces the current unit snapshot used by the renderer.
-     *
-     * @param players list of Player objects
-     */
-    public void setUnits(List<Player> players) {
-        List<UnitView> units = new ArrayList<>();
-        for (Player p : players) {
-            if (p.getUnits() == null) continue;
-            for (Unit u : p.getUnits()) {
-                boolean selected = u.getId().equals(this.selectedUnitId);
-                units.add(new UnitView(u, p, selected));
-            }
-        }
-        this.units = units;
     }
 
     /**
@@ -276,24 +144,7 @@ public class GameView {
      * @return player views
      */
     public List<PlayerView> getPlayers() {
-        if(players == null) {
-            List<PlayerView> list = new ArrayList<>();
-            return list;
-        }
         return players;
-    }
-
-    /**
-     * Replaces the current player summary snapshot shown in the HUD.
-     *
-     * @param players player views
-     */
-    public void setPlayers(List<Player> players) {
-        List<PlayerView> playersViews = new ArrayList<>();
-        for (Player p : players) {
-            playersViews.add(new PlayerView(p));
-        }
-        this.players=playersViews;
     }
 
     /**
@@ -306,61 +157,12 @@ public class GameView {
     }
 
     /**
-     * Replaces the planned action snapshot currently shown by the GUI.
+     * Returns the id of the unit currently selected by the local player.
      *
-     * @param actions planned actions
+     * @return selected unit UUID, or {@code null} if nothing is selected
      */
-    public void setPlannedActions(List<Action> actions) {
-        List<PlannedActionView> plannedActionViews = new ArrayList<>();
-        for (Action a : actions) {
-            plannedActionViews.add(new PlannedActionView(a));
-        }
-        this.plannedActions=plannedActionViews;
-    }
-
-    /**
-     * Selects one unit in the graphical view.
-     *
-     * <p>This method is intended for GUI interactions such as clicking a unit
-     * on the map or navigating units with the keyboard.</p>
-     *
-     * @param unitId identifier of the selected unit
-     */
-    public void selectUnit(UUID unitId) {
-        // need a window to implement
-        throw new UnsupportedOperationException("Selection logic is not implemented yet.");
-    }
-
-    /**
-     * Clears all current selections and highlights in the graphical view.
-     *
-     * <p>This method may be used when the player cancels an action,
-     * closes a context menu, or changes the active interaction mode.</p>
-     */
-    public void clearSelection() {
-        // need a window to implement
-        throw new UnsupportedOperationException("Selection clearing is not implemented yet.");
-    }
-
-    /**
-     * Highlights candidate destination tiles in the graphical interface.
-     *
-     * <p>This method is intended for previewing movement, healing, or attack
-     * ranges before the player confirms an action.</p>
-     *
-     * @param tiles tile identifiers or tile coordinates to highlight
-     */
-    public void highlightTiles(List<TileView> tiles) {
-        // need a window to implement
-        throw new UnsupportedOperationException("Tile highlighting is not implemented yet.");
-    }
-
-    /**
-     * Clears any currently highlighted tiles.
-     */
-    public void clearHighlightedTiles() {
-        // need a window to implement
-        throw new UnsupportedOperationException("Tile highlight clearing is not implemented yet.");
+    public UUID getSelectedUnitId() {
+        return selectedUnitId;
     }
 
     /**
@@ -370,10 +172,7 @@ public class GameView {
      * @return {@code true} if the view is render-ready
      */
     public boolean isRenderable() {
-        if (tiles.isEmpty() || units.isEmpty() || players.isEmpty()) {
-            return false;
-        }
-        return true;
+        return !tiles.isEmpty() && !units.isEmpty() && !players.isEmpty();
     }
 
     /**
@@ -382,81 +181,58 @@ public class GameView {
      * <p>This class should contain only tile-related presentation data,
      * not domain behavior.</p>
      */
-    public static class TileView {
+    public static final class TileView {
 
         /** Tile X coordinate. */
-        private int x;
+        private final int x;
 
         /** Tile Y coordinate. */
-        private int y;
+        private final int y;
 
         /** Presentation-friendly tile type name. */
-        private TileType type;
+        private final TileType type;
 
         /** Whether the tile is currently occupied. */
-        private boolean occupied;
+        private final boolean occupied;
 
         /** Whether the tile is highlighted by the GUI. */
-        private boolean highlighted;
-
-        /**
-         * Creates an empty tile view.
-         */
-        public TileView() {
-
-        }
+        private final boolean highlighted;
 
         /**
          * Creates a tile view.
          *
-         * @param t Tile which is converted into information for frontend
+         * @param x tile X coordinate
+         * @param y tile Y coordinate
+         * @param type tile type
+         * @param occupied whether the tile is occupied
+         * @param highlighted whether the tile is highlighted by the GUI
          */
-        public TileView(Tile t) {
-            setX(t.getX());
-            setY(t.getY());
-            setType(t.getType());
-            setOccupied(t.isOccupied());
-            setHighlighted(false); //trzeba dorobić jak będzie okno jakieś
+        public TileView(int x, int y, TileType type, boolean occupied, boolean highlighted) {
+            this.x = x;
+            this.y = y;
+            this.type = type;
+            this.occupied = occupied;
+            this.highlighted = highlighted;
         }
 
         public int getX() {
             return x;
         }
 
-        public void setX(int x) {
-            this.x = x;
-        }
-
         public int getY() {
             return y;
-        }
-
-        public void setY(int y) {
-            this.y = y;
         }
 
         public TileType getType() {
             return type;
         }
 
-        public void setType(TileType type) {
-            this.type = type;
-        }
-
         public boolean isOccupied() {
             return occupied;
         }
 
-        public void setOccupied(boolean occupied) {
-            this.occupied = occupied;
-        }
-
         public boolean isHighlighted() {
             return highlighted;
-        }
-
-        public void setHighlighted(boolean highlighted) {
-            this.highlighted=highlighted;
         }
     }
 
@@ -466,252 +242,236 @@ public class GameView {
      * <p>This class should contain only unit-related presentation data,
      * not combat, movement, or validation logic.</p>
      */
-    public static class UnitView {
+    public static final class UnitView {
 
         /** Unit identifier. */
-        private UUID unitId;
+        private final UUID unitId;
 
         /**Unit name*/
-        private String name;
+        private final String name;
 
         /** Owning player identifier. */
-        private UUID ownerId;
+        private final UUID ownerId;
 
         /** Display name or unit type. */
-        private String unitType;
+        private final String unitType;
 
         /** Current unit health. */
-        private int hp;
+        private final int hp;
 
         /** Current X position. */
-        private int x;
+        private final int x;
 
         /** Current Y position. */
-        private int y;
+        private final int y;
 
         /** Whether the unit is currently selected in the GUI. */
-        private boolean selected;
+        private final boolean selected;
 
         /** Max health points*/
-        private int maxHp;
+        private final int maxHp;
 
+        /** Tiles the unit can move per action. */
+        private final int speed;
 
-        /**
-         * Creates an empty unit view.
-         */
-        public UnitView() {
+        /** Attack range in tiles. */
+        private final int attackRange;
 
-        }
+        /** Armor value, or {@code 0} if the unit has no armor. */
+        private final int armor;
+
+        /** Current mana, or {@code -1} if the unit is not a mana user. */
+        private final int mana;
+
+        /** Maximum mana, or {@code -1} if the unit is not a mana user. */
+        private final int maxMana;
+
+        /** Total actions this unit may queue per turn. */
+        private final int actionsPerTurn;
+
+        /** Whether this unit can currently cast a spell (mage with enough mana). */
+        private final boolean canCast;
 
         /**
          * Creates a unit view.
          *
-         * @param u Unit object made into information for frontend
-         * @param p unit's owner
+         * @param unitId unit identifier
+         * @param name unit name
+         * @param ownerId owning player identifier
+         * @param unitType display name or unit type
+         * @param hp current unit health
+         * @param maxHp max health points
+         * @param x current X position
+         * @param y current Y position
+         * @param selected whether the unit is currently selected in the GUI
+         * @param speed tiles the unit can move per action
+         * @param attackRange attack range in tiles
+         * @param armor armor value, or {@code 0} if none
+         * @param mana current mana, or {@code -1} if not a mana user
+         * @param maxMana maximum mana, or {@code -1} if not a mana user
+         * @param actionsPerTurn total actions this unit may queue per turn
+         * @param canCast whether the unit can currently cast a spell
          */
-        public UnitView(Unit u, Player p, boolean selected) {
-            setUnitId(u.getId());
-            setName(u.getName());
-            setOwnerId(p.getUuid());
-            setUnitType(u.getClass().getSimpleName());
-            setHp(u.getHp());
-            setX(u.getPosX());
-            setY(u.getPosY());
-            setMaxHp(u.getMaxHp());
+        public UnitView(UUID unitId, String name, UUID ownerId, String unitType,
+                        int hp, int maxHp, int x, int y, boolean selected,
+                        int speed, int attackRange, int armor, int mana, int maxMana,
+                        int actionsPerTurn, boolean canCast) {
+            this.unitId = unitId;
+            this.name = name;
+            this.ownerId = ownerId;
+            this.unitType = unitType;
+            this.hp = hp;
+            this.maxHp = maxHp;
+            this.x = x;
+            this.y = y;
             this.selected = selected;
+            this.speed = speed;
+            this.attackRange = attackRange;
+            this.armor = armor;
+            this.mana = mana;
+            this.maxMana = maxMana;
+            this.actionsPerTurn = actionsPerTurn;
+            this.canCast = canCast;
         }
 
         public UUID getUnitId() {
             return unitId;
-        }
-
-        public void setUnitId(UUID unitId) {
-            this.unitId=unitId;
         }
 
         public UUID getOwnerId() {
             return ownerId;
         }
 
-        public void setOwnerId(UUID ownerId) {
-            this.ownerId=ownerId;
-        }
-
         public String getUnitType() {
             return unitType;
-        }
-
-        public void setUnitType(String unitType) {
-            this.unitType=unitType;
         }
 
         public int getHp() {
             return hp;
         }
 
-        public void setHp(int hp) {
-            this.hp=hp;
-        }
-
         public int getX() {
             return x;
-        }
-
-        public void setX(int x) {
-            this.x=x;
         }
 
         public int getY() {
             return y;
         }
 
-        public void setY(int y) {
-            this.y=y;
-        }
-
         public boolean isSelected() {
             return selected;
         }
 
-        public void setSelected(boolean selected) {
-            this.selected = selected;
-        }
         public int getMaxHp() { return maxHp; }
-
-        public void setMaxHp(int maxHp) { this.maxHp = maxHp; }
 
         public String getName(){
             return name;
         }
-        public void setName(String name){
-            this.name = name;
-        }
+
+        public int getSpeed() { return speed; }
+
+        public int getAttackRange() { return attackRange; }
+
+        public int getArmor() { return armor; }
+
+        public int getMana() { return mana; }
+
+        public int getMaxMana() { return maxMana; }
+
+        public boolean usesMana() { return mana >= 0; }
+
+        public int getActionsPerTurn() { return actionsPerTurn; }
+
+        public boolean canCast() { return canCast; }
 
     }
 
     /**
      * Lightweight player summary for the HUD.
      */
-    public static class PlayerView {
+    public static final class PlayerView {
 
         /** Player identifier. */
-        private UUID playerId;
+        private final UUID playerId;
 
         /** Display name shown in the HUD. */
-        private String name;
+        private final String name;
 
         /** Whether this player has already ended their turn. */
-        private boolean turnEnded;
+        private final boolean turnEnded;
 
         /** Number of remaining units shown in player summary panels. */
-        private int unitsCount;
-
-        /**
-         * Creates an empty player view.
-         */
-        public PlayerView() {
-
-        }
+        private final int unitsCount;
 
         /**
          * Creates a player view.
          *
-         * @param p Player object which is made into information for frontend
+         * @param playerId player identifier
+         * @param name display name shown in the HUD
+         * @param turnEnded whether this player has already ended their turn
+         * @param unitsCount number of remaining units
          */
-        public PlayerView(Player p) {
-            setPlayerId(p.getUuid());
-            setName(p.getName());
-            setTurnEnded(p.isTurnEnded());
-            setUnitsCount(p.getUnits().size());
+        public PlayerView(UUID playerId, String name, boolean turnEnded, int unitsCount) {
+            this.playerId = playerId;
+            this.name = name;
+            this.turnEnded = turnEnded;
+            this.unitsCount = unitsCount;
         }
 
         public UUID getPlayerId() {
             return playerId;
         }
 
-        public void setPlayerId(UUID playerId) {
-            this.playerId=playerId;
-        }
-
         public String getName() {
             return name;
-        }
-
-        public void setName(String name) {
-            this.name=name;
         }
 
         public boolean isTurnEnded() {
             return turnEnded;
         }
 
-        public void setTurnEnded(boolean turnEnded) {
-            this.turnEnded=turnEnded;
-        }
-
         public int getUnitsCount() {
             return unitsCount;
-        }
-
-        public void setUnitsCount(int unitsCount) {
-            this.unitsCount=unitsCount;
         }
     }
 
     /**
      * Lightweight planned action view for side panels, overlays and debug widgets.
      */
-    public static class PlannedActionView {
+    public static final class PlannedActionView {
 
         /** Presentation-friendly action type name. */
-        private String actionType;
+        private final String actionType;
 
         /** Unit that owns or performs the action. */
-        private UUID unitId;
+        private final UUID unitId;
 
         /** Optional human-readable action description for the GUI. */
-        private String description;
-
-        /**
-         * Creates an empty planned action view.
-         */
-        public PlannedActionView() {
-
-        }
+        private final String description;
 
         /**
          * Creates a planned action view.
          *
-         * @param a Class implementing Action interface
+         * @param actionType presentation-friendly action type name
+         * @param unitId unit that owns or performs the action
+         * @param description optional human-readable action description for the GUI
          */
-        public PlannedActionView(Action a) {
-            setActionType(a.type());
-            setUnitId(a.getUnitId());
-            setDescription(a.description());
+        public PlannedActionView(String actionType, UUID unitId, String description) {
+            this.actionType = actionType;
+            this.unitId = unitId;
+            this.description = description;
         }
 
         public String getActionType() {
             return actionType;
         }
 
-        public void setActionType(String actionType) {
-            this.actionType=actionType;
-        }
-
         public UUID getUnitId() {
             return unitId;
         }
 
-        public void setUnitId(UUID unitId) {
-            this.unitId=unitId;
-        }
-
         public String getDescription() {
             return description;
-        }
-
-        public void setDescription(String description) {
-            this.description=description;
         }
     }
 }

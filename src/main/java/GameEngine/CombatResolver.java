@@ -42,9 +42,9 @@ import java.util.Map;
  *
  * @author Dzhyhar Volodymyr
  * @author Żurek Jan
+ * @author Filip Glaser
  */
 public class CombatResolver implements Serializable {
-    @Serial
     private static final long serialVersionUID = 1L;
     private List<Action> actions = null;
 
@@ -76,6 +76,12 @@ public class CombatResolver implements Serializable {
 
                 if (attacker != null && target != null && isRangeValid(attacker, target, map)) {
                     if (!isFriendlyFire(attacker, target, e)) {
+                        if (attacker instanceof Mage mage) {
+                            if (!mage.canCast()) {
+                                continue;
+                            }
+                            mage.consumeMana();
+                        }
                         int dmg = calcDamage(attacker, target, map);
                         hpDeltas.merge(target, -dmg, Integer::sum);
                     }
@@ -151,10 +157,6 @@ public class CombatResolver implements Serializable {
         target.applyDamage(dmg);
     }
 
-    // -----------------------------------------------------------------------
-    // Private helpers
-    // -----------------------------------------------------------------------
-
     /**
      * Returns the cover damage reduction for the defending unit based on the
      * tile it currently occupies.
@@ -193,11 +195,6 @@ public class CombatResolver implements Serializable {
         }
         return false;
     }
-
-    // -----------------------------------------------------------------------
-    // Getters/setters
-    // -----------------------------------------------------------------------
-
     public List<Action> getActions() {
         return actions;
     }

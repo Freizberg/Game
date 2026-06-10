@@ -3,6 +3,7 @@ package NetworkManager;
 import Action.Action;
 import GameController.GameController;
 import GameController.GameStateUpdate;
+import GameEngine.GameEngine;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -77,12 +78,31 @@ public class ServerNetworkManager implements NetworkManager {
         for (ClientConnection client : clients) {
             try {
                 synchronized (client.out) {
+                    client.out.reset();
                     client.out.writeObject(u);
                     client.out.flush();
                 }
             } catch (IOException e) {
                 removeClient(client);
             }
+        }
+    }
+
+    /**
+     * Sends the engine snapshot to a freshly connected client.
+     *
+     * @param client the connection to send the snapshot to
+     */
+    private void sendInitialState(ClientConnection client) {
+        try {
+            GameEngine engine = controller.getEngine();
+            synchronized (client.out) {
+                client.out.reset();
+                client.out.writeObject(engine);
+                client.out.flush();
+            }
+        } catch (IOException e) {
+            removeClient(client);
         }
     }
 
@@ -112,6 +132,7 @@ public class ServerNetworkManager implements NetworkManager {
                     ClientConnection client = new ClientConnection(socket, in, out);
                     clients.add(client);
 
+                    sendInitialState(client);
                     startClientListener(client);
                 }
             } catch (IOException e) {

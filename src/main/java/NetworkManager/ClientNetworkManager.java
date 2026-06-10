@@ -3,6 +3,7 @@ package NetworkManager;
 import Action.Action;
 import GameController.GameController;
 import GameController.GameStateUpdate;
+import GameEngine.GameEngine;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -104,7 +105,9 @@ public class ClientNetworkManager implements NetworkManager {
                 while (socket != null && !socket.isClosed()) {
                     Object msg = in.readObject();
 
-                    if (msg instanceof GameStateUpdate update) {
+                    if (msg instanceof GameEngine initialEngine) {
+                        ctrl.applyInitialState(initialEngine);
+                    } else if (msg instanceof GameStateUpdate update) {
                         ctrl.applyStateUpdate(update);
                     }
                 }

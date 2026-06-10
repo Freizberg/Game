@@ -114,6 +114,9 @@ public class GameStateUpdate implements Serializable {
         } else if (this.isDraw) {
             engine.setState(GameState.DRAW);
         } else {
+            for (Player player : engine.getPlayers()) {
+                player.clearActions();
+            }
             engine.setState(GameState.PLANNING);
         }
     }

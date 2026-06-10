@@ -6,6 +6,7 @@ import GameEngine.GameState;
 import GameEngine.Player;
 import GameRenderer.GameRenderer;
 import GameView.GameView;
+import GameView.GameViewMapper;
 import Map.Tile;
 import NetworkManager.ClientNetworkManager;
 import NetworkManager.NetworkManager;
@@ -35,6 +36,7 @@ import java.util.UUID;
  *
  * @author Yevhenii Marienko
  * @author Dzhyhar Volodymyr
+ * @author Marcin Świerczyński
  */
 public class GameController {
 
@@ -60,6 +62,34 @@ public class GameController {
     private String autosavePath;
 
     private UUID selectedUnitId;
+
+    /** Current UI input mode, read by the mouse handler to interpret clicks. */
+    private InputMode inputMode = InputMode.NONE;
+
+    /**
+     * Perspective player for the local UI. In network mode this is the single
+     * player controlled on this machine; in local hot-seat mode it is used only
+     * as a fallback (the active planner is derived from turn state instead).
+     */
+    private Player localPlayer;
+
+    /**
+     * Whether this is a local multiplayer (hot-seat) session in which every
+     * player plans in turn on the same machine.
+     */
+    private boolean hotSeat;
+
+    /**
+     * Client-side prediction of the local player's queued actions.
+     *
+     * <p>A networked client does not mutate its (host-synchronised) engine when
+     * the player plans; it forwards intents to the host instead. To still give
+     * the player immediate visual feedback (planned-action arrows and the
+     * per-unit action count), the same intents are mirrored here and drawn over
+     * the board. The list is cleared whenever an authoritative
+     * {@link GameStateUpdate} or initial engine snapshot arrives.</p>
+     */
+    private final List<Action> clientPendingActions = new ArrayList<>();
 
     /**
      * Constructs a GameController with all required collaborators.
@@ -133,6 +163,17 @@ public class GameController {
     }
 
     /**
+     * Handles a heal request originating from the UI or console layer.
+     *
+     * @param casterId the UUID of the healing mage
+     * @param targetId the UUID of the friendly unit to heal
+     */
+    public void onHealRequested(UUID casterId, UUID targetId) {
+        Action action = inputHandler.onHeal(casterId, targetId);
+        handleInput(action);
+    }
+
+    /**
      * Handles a wait request originating from the UI or console layer.
      *
      * @param unitId the UUID of the unit that should wait
@@ -173,7 +214,7 @@ public class GameController {
      * writing a partially processed round state.</p>
      *
      * @throws IllegalStateException if saving is attempted during RESOLVING
-     *                               or if persistence is not configured
+     * or if persistence is not configured
      */
     public synchronized void saveGame() {
         ensureSaveAllowed();
@@ -189,7 +230,7 @@ public class GameController {
      *
      * @param path destination path for the save file
      * @throws IllegalStateException if saving is attempted during RESOLVING
-     *                               or if persistence is not configured
+     * or if persistence is not configured
      */
     public synchronized void saveGame(String path) {
         ensureSaveAllowed();
@@ -207,7 +248,7 @@ public class GameController {
      *
      * @param path path of the save file to load
      * @throws IllegalStateException if loading is attempted during RESOLVING
-     *                               or if persistence is not configured
+     * or if persistence is not configured
      */
     public synchronized void loadGame(String path) {
         ensureLoadAllowed();
@@ -277,15 +318,24 @@ public class GameController {
             return;
         }
 
-        // Remote client path: forward the action to the authoritative host.
         if (network != null && !network.isHost()) {
             if (network instanceof ClientNetworkManager clientNetworkManager) {
                 clientNetworkManager.sendAction(a);
             }
+            if (a instanceof SkipTurnAction skipTurnAction) {
+                Player p = engine.getPlayer(skipTurnAction.getPlayerId());
+                if (p != null) {
+                    p.endTurn();
+                    renderFullState();
+                }
+            } else if (engine.getState() == GameState.PLANNING
+                    && a.isValid(engine.getMap())
+                    && canQueueClientAction(a)) {
+                clientPendingActions.add(a);
+            }
             return;
         }
 
-        // Host or local path: mutate the authoritative planning state directly.
         if (a instanceof SkipTurnAction skipTurnAction) {
             Player p = engine.getPlayer(skipTurnAction.getPlayerId());
             if (p != null) engine.endTurn(p);
@@ -301,6 +351,13 @@ public class GameController {
             Player owner = findOwnerByUnitId(a.getUnitId());
             if (owner == null) {
                 return;
+            }
+
+            if (hotSeat) {
+                Player active = getActivePlayer();
+                if (active == null || !active.getUuid().equals(owner.getUuid())) {
+                    return;
+                }
             }
 
             Unit unit = null;
@@ -333,7 +390,6 @@ public class GameController {
 
         renderFullState();
 
-        // Once all players have ended planning, resolve the round and sync clients.
         if (engine.allPlayersEndedTurn()) {
             engine.setState(GameState.RESOLVING);
             renderFullState();
@@ -364,7 +420,50 @@ public class GameController {
             return;
         }
 
+        clientPendingActions.clear();
         u.apply(engine);
+        renderFullState();
+    }
+
+    /**
+     * Adopts the authoritative engine snapshot sent by the host when this peer
+     * joins a networked game.
+     *
+     * <p>The client originally starts with its own engine built from
+     * independent ids; once the host's authoritative engine arrives, the local
+     * engine is replaced so that all unit and player ids match the host. The
+     * player this client controls is identified by the position (turn order) of
+     * its previous local player, so no extra id needs to be transmitted.</p>
+     *
+     * @param newEngine the authoritative engine snapshot to adopt
+     */
+    public synchronized void applyInitialState(GameEngine newEngine) {
+        if (newEngine == null) {
+            return;
+        }
+
+        int playerIndex = 1;
+        if (engine != null && localPlayer != null && engine.getPlayers() != null) {
+            int found = engine.getPlayers().indexOf(localPlayer);
+            if (found >= 0) {
+                playerIndex = found;
+            }
+        }
+
+        List<Player> newPlayers = newEngine.getPlayers();
+        Player adopted = null;
+        if (newPlayers != null && !newPlayers.isEmpty()) {
+            int idx = Math.min(playerIndex, newPlayers.size() - 1);
+            adopted = newPlayers.get(idx);
+        }
+
+        this.engine = newEngine;
+        this.hotSeat = false;
+        this.localPlayer = adopted;
+        this.selectedUnitId = null;
+        this.inputMode = InputMode.NONE;
+        this.clientPendingActions.clear();
+
         renderFullState();
     }
 
@@ -392,7 +491,7 @@ public class GameController {
      * {@link GameStateUpdate} snapshots from the host.</p>
      *
      * @throws IllegalStateException if network mode is requested without
-     *                               a configured {@link NetworkManager}
+     * a configured {@link NetworkManager}
      */
     public void startNetworkGame() {
         if (network == null) {
@@ -448,7 +547,7 @@ public class GameController {
      * internal game state may be in a transient intermediate form.</p>
      *
      * @throws IllegalStateException if the engine is not initialized or if the
-     *                               game is currently in the RESOLVING phase
+     * game is currently in the RESOLVING phase
      */
     private void ensureSaveAllowed() {
         if (engine == null) {
@@ -467,7 +566,7 @@ public class GameController {
      * active engine mid-resolution would invalidate the turn lifecycle.</p>
      *
      * @throws IllegalStateException if the game is currently in the
-     *                               RESOLVING phase
+     * RESOLVING phase
      */
     private void ensureLoadAllowed() {
         if (engine != null && engine.getState() == GameState.RESOLVING) {
@@ -506,6 +605,49 @@ public class GameController {
         }
 
         return null;
+    }
+
+    /**
+     * Decides whether another action may be predicted locally for the unit
+     * referenced by the given action, mirroring the per-unit action economy the
+     * host enforces (at most {@code actionsPerTurn} actions, and no further
+     * actions once an attack or heal has been queued).
+     *
+     * @param a the candidate action
+     * @return {@code true} if the action fits within the unit's remaining budget
+     */
+    private boolean canQueueClientAction(Action a) {
+        Player owner = findOwnerByUnitId(a.getUnitId());
+        if (owner == null) {
+            return false;
+        }
+
+        Unit unit = null;
+        for (Unit u : owner.getUnits()) {
+            if (u.getId().equals(a.getUnitId())) {
+                unit = u;
+                break;
+            }
+        }
+        if (unit == null) {
+            return false;
+        }
+
+        long queued = 0;
+        boolean hasFinalizing = false;
+        for (Action q : clientPendingActions) {
+            if (q.getUnitId() != null && q.getUnitId().equals(unit.getId())) {
+                queued++;
+                if (q instanceof AttackAction || q instanceof HealAction) {
+                    hasFinalizing = true;
+                }
+            }
+        }
+
+        if (hasFinalizing) {
+            return false;
+        }
+        return queued < unit.getActionsPerTurn();
     }
 
     /**
@@ -569,7 +711,7 @@ public class GameController {
             throw new IllegalStateException("GameEngine is not initialized.");
         }
 
-        return GameView.fromController(getCurrentPhase(),getEngine().getCurrentRound(),getEngine().getWinnerId(),isAutosaveEnabled(),getEngine().getMap(),getEngine().getPlayers(),getPlannedActionsView(),getSelectedUnitId());
+        return GameViewMapper.fromController(this);
     }
 
     /**
@@ -581,7 +723,9 @@ public class GameController {
      * @return defensive copy of currently planned actions
      */
     public synchronized List<Action> getPlannedActionsView() {
-        return new ArrayList<>(collectPlannedActions());
+        List<Action> all = new ArrayList<>(collectPlannedActions());
+        all.addAll(clientPendingActions);
+        return all;
     }
 
     /**
@@ -632,7 +776,6 @@ public class GameController {
             throw new IllegalStateException("GameEngine is not initialized.");
         }
 
-        // TODO Replace raw Player exposure with dedicated GUI DTOs if the view should stay decoupled from domain classes.
         return new ArrayList<>(engine.getPlayers());
     }
 
@@ -663,7 +806,6 @@ public class GameController {
 
         Tile destination = engine.getMap().getTile(x, y);
         if (destination == null) {
-            // TODO Replace with richer validation feedback for GUI error popups or status bars.
             throw new IllegalArgumentException("Destination tile does not exist.");
         }
 
@@ -680,8 +822,20 @@ public class GameController {
      * @param targetId UUID of the clicked target unit
      */
     public synchronized void requestAttackUnit(UUID attackerId, UUID targetId) {
-        // TODO Return structured command result if the GUI should display detailed rejection messages.
         onAttackRequested(attackerId, targetId);
+    }
+
+    /**
+     * Handles a mage-to-ally heal selection from the graphical interface.
+     *
+     * <p>Intended for GUI flows where the player selects a mage, presses the
+     * heal action button, and then clicks a friendly target unit.</p>
+     *
+     * @param casterId UUID of the selected healing mage
+     * @param targetId UUID of the clicked friendly target unit
+     */
+    public synchronized void requestHealUnit(UUID casterId, UUID targetId) {
+        onHealRequested(casterId, targetId);
     }
 
     /**
@@ -693,7 +847,6 @@ public class GameController {
      * @param unitId UUID of the unit that should wait
      */
     public synchronized void requestUnitWait(UUID unitId) {
-        // TODO Return acceptance result if the GUI should provide immediate command feedback.
         onWaitRequested(unitId);
     }
 
@@ -706,8 +859,9 @@ public class GameController {
      * @param playerId UUID of the player ending the turn
      */
     public synchronized void requestPlayerEndTurn(UUID playerId) {
-        // TODO Optionally return post-action UI state if the graphical layer expects a refresh trigger.
         onEndTurnRequested(playerId);
+        selectedUnitId = null;
+        inputMode = InputMode.NONE;
     }
 
     /**
@@ -719,7 +873,6 @@ public class GameController {
      * @param playerId UUID of the player issuing the command
      */
     public synchronized void submitGuiCommand(String commandLine, UUID playerId) {
-        // TODO Return parse/result details if the GUI console should display feedback messages.
         onConsoleCommand(commandLine, playerId);
     }
 
@@ -730,7 +883,6 @@ public class GameController {
      * configuration panels in the GUI.</p>
      */
     public synchronized void requestSaveGame() {
-        // TODO Restrict this operation if only specific GUI roles should be allowed to save.
         saveGame();
     }
 
@@ -742,7 +894,6 @@ public class GameController {
      * @param path target save path chosen by the user
      */
     public synchronized void requestSaveGame(String path) {
-        // TODO Replace raw filesystem paths with save slots if the GUI should stay platform-neutral.
         saveGame(path);
     }
 
@@ -754,7 +905,6 @@ public class GameController {
      * @param path source save path chosen by the user
      */
     public synchronized void requestLoadGame(String path) {
-        // TODO Replace raw filesystem paths with save slots if the GUI should stay platform-neutral.
         loadGame(path);
     }
 
@@ -766,7 +916,6 @@ public class GameController {
      * @param path autosave path, or blank to use the default save path
      */
     public synchronized void enableAutosaveFromSettings(String path) {
-        // TODO Persist this preference externally if application settings storage is introduced.
         enableAutosave(path);
     }
 
@@ -776,10 +925,83 @@ public class GameController {
      * <p>This is intended for settings screens and match configuration windows.</p>
      */
     public synchronized void disableAutosaveFromSettings() {
-        // TODO Expose autosave settings via a dedicated view model if the GUI needs one source of truth.
         disableAutosave();
     }
 
     public synchronized UUID getSelectedUnitId(){return selectedUnitId;}
     public synchronized void setSelectedUnitId(UUID id) { this.selectedUnitId = id; }
+
+    /**
+     * Configures which player the local UI represents.
+     *
+     * @param localPlayer the perspective/fallback player on this machine
+     * @param hotSeat {@code true} for a local hot-seat session where players
+     * take turns planning on the same machine
+     */
+    public synchronized void configureLocalPlayer(Player localPlayer, boolean hotSeat) {
+        this.localPlayer = localPlayer;
+        this.hotSeat = hotSeat;
+    }
+
+    /**
+     * Returns whether this session is a local hot-seat game.
+     *
+     * @return {@code true} for local multiplayer on a single machine
+     */
+    public synchronized boolean isHotSeat() {
+        return hotSeat;
+    }
+
+    /**
+     * Returns whether this peer is a non-authoritative network client.
+     *
+     * <p>Used by the UI to restrict save/load to the host (or local games),
+     * since a client only holds a synchronised copy of the host's state.</p>
+     *
+     * @return {@code true} if connected as a client, {@code false} for host or local play
+     */
+    public synchronized boolean isNetworkClient() {
+        return network != null && !network.isHost();
+    }
+
+    /**
+     * Returns the player the UI should currently treat as "the local player".
+     *
+     *
+     * @return the active player for the UI, or {@code null} if none is available
+     */
+    public synchronized Player getActivePlayer() {
+        if (engine == null) {
+            return localPlayer;
+        }
+        if (hotSeat && engine.getState() == GameState.PLANNING && engine.getPlayers() != null) {
+            for (Player p : engine.getPlayers()) {
+                if (!p.isTurnEnded()) {
+                    return p;
+                }
+            }
+        }
+        if (localPlayer != null) {
+            return localPlayer;
+        }
+        List<Player> ps = engine.getPlayers();
+        return (ps == null || ps.isEmpty()) ? null : ps.get(0);
+    }
+
+    /**
+     * Returns the current UI input mode used to interpret the next map click.
+     *
+     * @return current input mode, never {@code null}
+     */
+    public synchronized InputMode getInputMode() { return inputMode; }
+
+    /**
+     * Sets the current UI input mode. Used by action buttons to switch the
+     * interface into move/attack/heal target-selection mode.
+     *
+     * @param mode the new input mode; {@code null} is treated as {@link InputMode#NONE}
+     */
+    public synchronized void setInputMode(InputMode mode) {
+        this.inputMode = (mode == null) ? InputMode.NONE : mode;
+    }
 }

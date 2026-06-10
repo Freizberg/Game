@@ -63,6 +63,8 @@ public class GameController {
 
     private UUID selectedUnitId;
 
+    private int assignedPlayerIndex = -1;
+
     /** Current UI input mode, read by the mouse handler to interpret clicks. */
     private InputMode inputMode = InputMode.NONE;
 
@@ -442,11 +444,16 @@ public class GameController {
             return;
         }
 
-        int playerIndex = 1;
-        if (engine != null && localPlayer != null && engine.getPlayers() != null) {
-            int found = engine.getPlayers().indexOf(localPlayer);
-            if (found >= 0) {
-                playerIndex = found;
+        int playerIndex;
+        if (assignedPlayerIndex >= 0) {
+            playerIndex = assignedPlayerIndex;
+        } else {
+            playerIndex = 1;
+            if (engine != null && localPlayer != null && engine.getPlayers() != null) {
+                int found = engine.getPlayers().indexOf(localPlayer);
+                if (found >= 0) {
+                    playerIndex = found;
+                }
             }
         }
 
@@ -1003,5 +1010,48 @@ public class GameController {
      */
     public synchronized void setInputMode(InputMode mode) {
         this.inputMode = (mode == null) ? InputMode.NONE : mode;
+    }
+
+    /**
+     * Weryfikuje, czy dla każdej aktywnej jednostki należącej do obecnego gracza
+     * została zaplanowana przynajmniej jedna akcja w bieżącej fazie planowania rundy.
+     * Zapobiega pomijaniu tur bez wydania rozkazów wszystkim podległym jednostkom.
+     *
+     * @return true, jeśli każda jednostka gracza posiada przypisaną akcję; false w przeciwnym wypadku
+     */
+    public synchronized boolean areAllUnitsConfiguredForTurn() {
+        Player active = getActivePlayer();
+        if (active == null || active.getUnits() == null || active.getUnits().isEmpty()) {
+            return true;
+        }
+        List<Action> actionsToCheck;
+        if (isNetworkClient()) {
+            actionsToCheck = clientPendingActions;
+        } else {
+            actionsToCheck = active.getPlannedActions();
+        }
+
+        if (actionsToCheck == null || actionsToCheck.isEmpty()) {
+            return false;
+        }
+        for (Unit unit : active.getUnits()) {
+            boolean unitHasAction = false;
+            for (Action a : actionsToCheck) {
+                if (a.getUnitId() != null && a.getUnitId().equals(unit.getId())) {
+                    unitHasAction = true;
+                    break;
+                }
+            }
+            if (!unitHasAction) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+
+    public synchronized void setAssignedPlayerIndex(Integer assignedIndex) {
+        this.assignedPlayerIndex = assignedIndex;
     }
 }

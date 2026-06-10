@@ -114,10 +114,21 @@ public class GameHudPanel {
         // Przycisk Koniec tury.
         JButton endTurn = styledButton("Koniec tury", BTN_END);
         endTurn.addActionListener(e -> {
-            Player active = gameController.getActivePlayer();
-            if (active != null) {
-                gameController.requestPlayerEndTurn(active.getUuid());
-                gameController.setInputMode(InputMode.NONE);
+            // Twarda prewalidacja planu tury na podstawie nowej metody z kontrolera
+            if (!gameController.areAllUnitsConfiguredForTurn()) {
+                JOptionPane.showMessageDialog(
+                        null,
+                        "Nie możesz zakończyć tury! Musisz wybrać przynajmniej jedną akcję (ruch, atak, leczenie lub czekanie) dla KAŻDEJ swojej jednostki.",
+                        "Niekompletne rozkazy",
+                        JOptionPane.WARNING_MESSAGE
+                );
+                return; // Przerywamy akcję przycisku, kontroler nie dostanie żądania zakończenia tury
+            }
+
+            // NAPRAWA HOT-SEAT: Dynamiczne pobieranie aktualnie planującego gracza
+            Player activePlayer = gameController.getActivePlayer();
+            if (activePlayer != null) {
+                gameController.requestPlayerEndTurn(activePlayer.getUuid());
             }
         });
 

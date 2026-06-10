@@ -104,15 +104,16 @@ public class ClientNetworkManager implements NetworkManager {
             try {
                 while (socket != null && !socket.isClosed()) {
                     Object msg = in.readObject();
-
-                    if (msg instanceof GameEngine initialEngine) {
+                    if(msg instanceof Integer assignedIndex) {
+                        ctrl.setAssignedPlayerIndex(assignedIndex);
+                    } else if (msg instanceof GameEngine initialEngine) {
                         ctrl.applyInitialState(initialEngine);
                     } else if (msg instanceof GameStateUpdate update) {
                         ctrl.applyStateUpdate(update);
                     }
                 }
             } catch (EOFException ignored) {
-                // Server closed connection normally.
+
             } catch (IOException | ClassNotFoundException e) {
                 throw new RuntimeException("Client listener stopped unexpectedly.", e);
             }

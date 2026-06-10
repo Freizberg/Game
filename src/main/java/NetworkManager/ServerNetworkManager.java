@@ -43,6 +43,8 @@ public class ServerNetworkManager implements NetworkManager {
     /** The list of currently connected client connections. */
     private final List<ClientConnection> clients = new CopyOnWriteArrayList<>();
 
+    private int nextSlot = 1;
+
     public ServerNetworkManager(int port, GameController controller) {
         this.port = port;
         this.controller = controller;
@@ -98,6 +100,7 @@ public class ServerNetworkManager implements NetworkManager {
             GameEngine engine = controller.getEngine();
             synchronized (client.out) {
                 client.out.reset();
+                client.out.writeObject(Integer.valueOf(client.playerIndex));
                 client.out.writeObject(engine);
                 client.out.flush();
             }
@@ -129,7 +132,13 @@ public class ServerNetworkManager implements NetworkManager {
                     out.flush();
                     ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-                    ClientConnection client = new ClientConnection(socket, in, out);
+                    int maxIndex = controller.getEngine().getPlayers().size() - 1;
+                    int slot = nextSlot++;
+                    if (slot > maxIndex) {
+                        socket.close();
+                        continue;
+                    }
+                    ClientConnection client = new ClientConnection(socket, in, out, slot);
                     clients.add(client);
 
                     sendInitialState(client);
@@ -215,11 +224,13 @@ public class ServerNetworkManager implements NetworkManager {
         private final Socket socket;
         private final ObjectInputStream in;
         private final ObjectOutputStream out;
+        private final int playerIndex;
 
-        private ClientConnection(Socket socket, ObjectInputStream in, ObjectOutputStream out) {
+        private ClientConnection(Socket socket, ObjectInputStream in, ObjectOutputStream out,  int playerIndex) {
             this.socket = socket;
             this.in = in;
             this.out = out;
+            this.playerIndex = playerIndex;
         }
     }
 }

@@ -31,6 +31,7 @@ import java.util.UUID;
  * lub sieciową (jako Host lub Klient).
  *
  * @author Marcin Świerczyński
+ * @author Filip Glaser
  */
 public class GuiMain {
 
@@ -159,7 +160,14 @@ public class GuiMain {
                 if (portStr != null && !portStr.trim().isEmpty()) {
                     try {
                         int port = Integer.parseInt(portStr.trim());
-                        startGame("JOIN", ip, port);
+                        // Klient nie wybiera liczby graczy ani jednostek — pełny stan
+                        // (z armiami ustalonymi przez hosta) przyjdzie od serwera.
+                        // Budujemy tylko tymczasowy 2-osobowy silnik jako placeholder.
+                        List<String[]> placeholderChoices = List.of(
+                                new String[]{"Rycerz", "Łucznik"},
+                                new String[]{"Rycerz", "Łucznik"}
+                        );
+                        launchGame(buildDefaultEngine(placeholderChoices), "JOIN", ip, port);
                     } catch (NumberFormatException ex) {
                         JOptionPane.showMessageDialog(frame, "Nieprawidłowy port!", "Błąd", JOptionPane.ERROR_MESSAGE);
                     }
@@ -167,6 +175,11 @@ public class GuiMain {
             }
         });
         card.add(btnJoin);
+
+        card.add(Box.createRigidArea(new Dimension(0, 14)));
+        JButton btnRules = createMenuButton("Zasady Gry");
+        btnRules.addActionListener(e -> showRulesDialog());
+        card.add(btnRules);
 
         menuPanel.add(card);
 
@@ -203,6 +216,18 @@ public class GuiMain {
             }
         });
         return btn;
+    }
+
+    /**
+     * Prompts for the number of players in a brand-new match (2–4).
+     *
+     * @return the chosen player count, or {@code null} if the user cancelled
+     */
+    private static Integer askPlayerCount() {
+        Integer[] opts = {2, 3, 4};
+        return (Integer) JOptionPane.showInputDialog(
+                frame, "Na ilu graczy?", "Nowa gra",
+                JOptionPane.QUESTION_MESSAGE, null, opts, 2);
     }
 
     /**
@@ -248,41 +273,112 @@ public class GuiMain {
     }
 
     /**
-     * Builds a fresh default match (map, two players and their starting units).
+     * Buduje i w pełni konfiguruje instancję silnika gry. Przed alokacją wybranych
+     * jednostek czyści planszę z domyślnych obiektów zainicjalizowanych przez parser mapy,
+     * eliminując błąd nadpisywania struktur danych.
      *
-     * @return a ready-to-play engine for a brand-new game
+     * @param allChoices lista zawierająca tablice z wybranymi typami jednostek dla obu graczy
+     * @return w pełni zainicjalizowany obiekt GameEngine z poprawnym układem armii na mapie
      */
-    private static GameEngine buildDefaultEngine() {
+    private static GameEngine buildDefaultEngine(List<String[]> allChoices) {
         GameEngine engine = new GameEngine();
         GameMap map = MapConfig.loadMap("/maps/level1.txt");
         engine.setMap(map);
 
-        Player player1 = new Player("Gracz 1");
-        Player player2 = new Player("Gracz 2");
+        // CZYSZCZENIE MAPY: Usuwamy automatycznie wygenerowane postacie z pliku level1.txt
+        for (int x = 0; x < map.getWidth(); x++) {
+            for (int y = 0; y < map.getHeight(); y++) {
+                if (map.getTile(x, y) != null) {
+                    map.getTile(x, y).setUnit(null);
+                }
+            }
+        }
 
-        Knight p1Knight = new Knight("Artur", 0, 0);
-        Archer p1Archer = new Archer("Robin", 0, 1);
-        Mage p2Mage = new Mage("Merlin", 9, 9);
-        Knight p2Knight = new Knight("Lancelot", 9, 8);
+        // Pozycje startowe
+        int[][][] spawns = {
+                { {0, 0}, {0, 1} },   // Gracz 1
+                { {9, 9}, {9, 8} },   // Gracz 2
+                { {0, 9}, {0, 8} },   // Gracz 3
+                { {9, 0}, {9, 1} },   // Gracz 4
+        };
 
-        player1.setUnits(new ArrayList<>(List.of(p1Knight, p1Archer)));
-        player2.setUnits(new ArrayList<>(List.of(p2Mage, p2Knight)));
+        List<Player> players = new ArrayList<>();
+        for (int i = 0; i < allChoices.size(); i++) {
+            Player p = new Player("Gracz " + (i + 1));
+            String[] choices = allChoices.get(i);
 
-        engine.setPlayers(new ArrayList<>(List.of(player1, player2)));
+            int x1 = spawns[i][0][0], y1 = spawns[i][0][1];
+            int x2 = spawns[i][1][0], y2 = spawns[i][1][1];
 
-        map.placeUnit(p1Knight, 0, 0);
-        map.placeUnit(p1Archer, 0, 1);
-        map.placeUnit(p2Mage, 9, 9);
-        map.placeUnit(p2Knight, 9, 8);
+            Unit u1 = createUnit(choices[0], "Bohater " + (i + 1) + "_1", x1, y1);
+            Unit u2 = createUnit(choices[1], "Bohater " + (i + 1) + "_2", x2, y2);
+
+            p.setUnits(new ArrayList<>(List.of(u1, u2)));
+            players.add(p);
+
+            map.placeUnit(u1, x1, y1);
+            map.placeUnit(u2, x2, y2);
+        }
+        engine.setPlayers(players);
 
         return engine;
     }
 
     /**
-     * Starts a brand-new match in the given mode.
+     * Mapuje tekstowy wybór z poziomu komponentu JComboBox na konkretną klasę
+     * domenową reprezentującą typ postaci w grze.
+     *
+     * @param type nazwa typu jednostki pobrana z interfejsu ("Mag", "Łucznik", "Rycerz")
+     * @param name unikalne imię przypisywane tworzonej jednostce
+     * @param x współrzędna startowa X
+     * @param y współrzędna startowa Y
+     * @return instancja klasy pochodnej typu {@link Unit}
+     */
+    private static Unit createUnit(String type, String name, int x, int y) {
+        if ("Mag".equals(type)) return new Mage(name, x, y);
+        if ("Łucznik".equals(type)) return new Archer(name, x, y);
+        return new Knight(name, x, y);
+    }
+
+    /**
+     * Inicjuje proces uruchomienia rozgrywki. Przeprowadza sekwencyjny wybór
+     * armii startowej najpierw dla Gracza 1, a następnie dla Gracza 2 za pomocą
+     * dedykowanych okien dialogowych.
+     *
+     * @param mode tryb uruchomienia gry ("LOCAL", "HOST", "JOIN")
+     * @param ip adres IP serwera (używany wyłącznie przy dołączaniu jako klient)
+     * @param port port nasłuchu dla modułu sieciowego
      */
     private static void startGame(String mode, String ip, int port) {
-        launchGame(buildDefaultEngine(), mode, ip, port);
+        Integer playerCount = askPlayerCount();
+        if (playerCount == null) {
+            return;
+        }
+
+        List<String[]> allChoices = new ArrayList<>();
+        String[] options = {"Rycerz", "Łucznik", "Mag"};
+
+        for (int i = 0; i < playerCount; i++) {
+            JComboBox<String> unit1 = new JComboBox<>(options);
+            JComboBox<String> unit2 = new JComboBox<>(options);
+            unit2.setSelectedIndex(1); // Domyślnie druga jednostka to Łucznik
+
+            JPanel panel = new JPanel(new GridLayout(0, 1));
+            panel.add(new JLabel("GRACZ " + (i + 1) + " - Wybierz pierwszą jednostkę:"));
+            panel.add(unit1);
+            panel.add(new JLabel("GRACZ " + (i + 1) + " - Wybierz drugą jednostkę:"));
+            panel.add(unit2);
+
+            int result = JOptionPane.showConfirmDialog(frame, panel,
+                    "Skonfiguruj armię - Gracz " + (i + 1),
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+            if (result != JOptionPane.OK_OPTION) {
+                return;
+            }
+            allChoices.add(new String[]{(String) unit1.getSelectedItem(), (String) unit2.getSelectedItem()});
+        }
+
+        launchGame(buildDefaultEngine(allChoices), mode, ip, port);
     }
 
     /**
@@ -379,5 +475,21 @@ public class GuiMain {
             JOptionPane.showMessageDialog(frame, "Błąd uruchamiania gry: " + ex.getMessage(), "Błąd", JOptionPane.ERROR_MESSAGE);
             showMainMenu();
         }
+    }
+    /**
+     * Wyświetla graficzne okno dialogowe zawierające skrócone zasady gry
+     * i instrukcje dla początkujących graczy.
+     */
+    private static void showRulesDialog() {
+        String rules = "ZASADY GRY:\n\n" +
+                "1. Faza Planowania: Wszyscy gracze w tajemnicy planują swoje akcje (ruch, atak, czekanie).\n" +
+                "2. Punkty Akcji: Każda jednostka ma ograniczoną liczbę akcji na rundę.\n" +
+                "3. Faza Rozwiązywania: Po kliknięciu 'Zakończ turę' przez wszystkich, gra wykonuje akcje.\n" +
+                "4. Teren: \n" +
+                "   - Las redukuje otrzymywane obrażenia.\n" +
+                "   - Woda i Góry blokują poruszanie się.\n" +
+                "5. Zwycięstwo: Wygrywa ten, kto wyeliminuje wszystkie jednostki przeciwnika.";
+
+        JOptionPane.showMessageDialog(frame, rules, "Zasady Gry", JOptionPane.INFORMATION_MESSAGE);
     }
 }
